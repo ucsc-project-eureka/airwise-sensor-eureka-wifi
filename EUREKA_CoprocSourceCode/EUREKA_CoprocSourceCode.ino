@@ -286,6 +286,10 @@ int currentTime;
 bool getDataFlag = false;
 
 void setup(){
+  // turn on the radio from the coproc
+  PORT->Group[0].DIRSET.reg = PORT_PA17;
+  PORT->Group[0].OUTCLR.reg = PORT_PA17;
+
   DEBUG_PORT.begin(115200);
 
   while (!DEBUG_PORT);
