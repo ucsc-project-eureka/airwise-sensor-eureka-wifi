@@ -127,7 +127,7 @@ void serialPrintINAData(void){
   }
 
   // Ensure PA17 remains LOW
-  PORT->Group[0].OUTCLR.reg = PORT_PA17;
+  // PORT->Group[0].OUTCLR.reg = PORT_PA17;
 }
 
 // Checking functions.
@@ -368,4 +368,7 @@ void loop(){
     ESP32Serial.println(myData.timestamp);
     getDataFlag = false;
   }
+  // Ensure PA17 remains LOW
+  PORT->Group[0].OUTCLR.reg = PORT_PA17;
+
 }
