@@ -1,7 +1,7 @@
 
 /*
 NOTE: 
-Heltec Wireless Shell (V3) board on the aurduino platform
+Heltec Wireless Shell (V3) board on the aurduino platform.
 */
 
 #include <esp_now.h>
@@ -148,7 +148,7 @@ void setup(){
 
 void loop() {
   if (scheduleReceived && hasJoined && millis() >= scheduledSlotTime){
-    // Trigger the corproc to send sensor data to ESP32.
+    // Trigger the coproc to send sensor data to ESP32.
     Serial.println("SENSOR_DATA");
     // Wait for coproc to respond.
     sensorDataPacket_t dataPacket;

@@ -8,7 +8,7 @@ NOTE: This should be compiled with the Heltec Wireless Shell (V3) in order to ge
 #include <esp_wifi.h>
 
 #define MAX_SENSOR_NODES 3
-#define TDMA_SLOT_TIME 200
+#define TDMA_SLOT_TIME 1000
 #define JOIN_REQUEST_TIMEOUT 1000
 #define SENSOR_RESPONSE_TIMEOUT (TDMA_SLOT_TIME * MAX_SENSOR_NODES)
 
@@ -206,8 +206,8 @@ void loop(){
       sendTime = currentTime;
       esp_now_send(broadcastAddress,(uint8_t*)&giveMeData,sizeof(discoveryPacket_t));
       Serial.println("Sent GIVE DATA!");
-      discoverySentTime = millis();       // <-- add this
-      waitingForJoinRequests = true;      // <-- add this
+      discoverySentTime = millis();
+      waitingForJoinRequests = true;     
   }
   if (waitingForJoinRequests && millis() - discoverySentTime > JOIN_REQUEST_TIMEOUT) {
     Serial.println("Finished waiting for JOIN_REQUESTs.");
