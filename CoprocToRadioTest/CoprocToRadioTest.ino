@@ -11,8 +11,8 @@
 #define DEBUG_PORT SerialUSB
 
 // From Airwise's ESP32 UART connections.
-#define ESP_PIN_TX 15
-#define ESP_PIN_RX 16
+#define ESP_PIN_TX 8
+#define ESP_PIN_RX 9
 
 // Pins/custom serial port for the ESP32 - Credit, Airwise team
 // Create a new Serial instance for SERCOM0 ----------------------------------------
@@ -49,15 +49,16 @@ void loop() {
   currentTime = millis();
   // Send message every five seconds.
   // fire every interval of WAIT_TIME
-  if((currentTime-startTime)%WAIT_TIME == 0){
-    startTime = currentTime; // reset time markers.
-    ESP32Serial.println("Hello ESP32 from Coproc!\n");
-    DEBUG_PORT.println("Hello ESP32 sent!\n");
-  }
-  // Otherwise, add the loading dots every second.
-  else if((currentTime-startTime)%SECOND_TIME == 0){
-    DEBUG_PORT.println(".");
-  }
+  
+  // if((currentTime-startTime)%WAIT_TIME == 0){
+  //   startTime = currentTime; // reset time markers.
+  //   ESP32Serial.println("Hello ESP32 from Coproc!\n");
+  //   DEBUG_PORT.println("Hello ESP32 sent!\n");
+  // }
+  // // Otherwise, add the loading dots every second.
+  // else if((currentTime-startTime)%SECOND_TIME == 0){
+  //   DEBUG_PORT.println(".");
+  // }
 
   // Read whatever's sent back.
   if(ESP32Serial.available()){
