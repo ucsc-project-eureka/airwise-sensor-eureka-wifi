@@ -1,4 +1,4 @@
-
+// Coproc sends message to the radio to be broadcast every five seconds.
 /*
  * - Mode: TEXTMSG
  * - Baud rate: 38400
@@ -65,7 +65,7 @@ void loop() {
 
     ESP_PORT.println(message);
 
-    DEBUG_PORT.print("Sent to Meshtastic (Serial1): ");
+    DEBUG_PORT.print("Sent to ESP32 (Serial1): ");
     DEBUG_PORT.println(message);
   }
 }

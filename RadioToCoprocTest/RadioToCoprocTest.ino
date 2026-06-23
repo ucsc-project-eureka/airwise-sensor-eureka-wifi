@@ -4,7 +4,8 @@
  * - RX GPIO: 44
  * - TX GPIO: 43
  */
-#define DEBUG_PORT SerialUSB
+
+#define DEBUG_PORT Serial
 #define ESP_PORT  Serial1
 
 constexpr uint32_t DEBUG_BAUD = 115200;
@@ -16,8 +17,6 @@ char receiveBuffer[RECEIVE_BUFFER_SIZE];
 size_t receiveLength = 0;
 
 void setup() {
-  PORT->Group[0].DIRSET.reg = PORT_PA17;
-  PORT->Group[0].OUTCLR.reg = PORT_PA17;
 
   DEBUG_PORT.begin(DEBUG_BAUD);
   uint32_t start = millis();
@@ -27,9 +26,9 @@ void setup() {
   DEBUG_PORT.print("Debug serial1 on, baud rate: ");
   DEBUG_PORT.println(DEBUG_BAUD);
 
-  ESP_PORT.begin(ESP_BAUD);
+  ESP_PORT.begin(ESP_BAUD,SERIAL_8N1, 44, 43);
   DEBUG_PORT.println();
-  DEBUG_PORT.print("Meshtastic UART on, baud rate: ");
+  DEBUG_PORT.print("ESP UART on, baud rate: ");
   DEBUG_PORT.println(ESP_BAUD);}
 
 void loop() {
@@ -48,7 +47,7 @@ void loop() {
       if (receiveLength > 0) {
         receiveBuffer[receiveLength] = '\0';
 
-        DEBUG_PORT.print("Received from Meshtastic: ");
+        DEBUG_PORT.print("Received from coproc: ");
         DEBUG_PORT.println(receiveBuffer);
 
         receiveLength = 0;
