@@ -7,18 +7,18 @@ Heltec Wireless Shell (V3) board on the aurduino platform.
 #include <SPI.h>
 #include <esp_now.h>
 #include <WiFi.h>
-#include "wiring_private.h" // Necessary for pin peripheral multiplexing (from Sankie)
-#include <HardwareSerial.h>
 
 #define MAX_SENSOR_NODES 3
 #define TDMA_SLOT_TIME 1000
 
-// From Airwise's ESP32 UART connections.
-#define ESP_PIN_TX 16
-#define ESP_PIN_RX 15
+#define DEBUG_PORT Serial
+#define COPROC_PORT Serial1
 
-// Pins/custom serial port for the ESP32 - Credit, Airwise team
-HardwareSerial COPROC_SERIAL(1);
+#define ESP_BAUD 9600
+
+// From Airwise's ESP32 UART connections.
+#define ESP_PIN_TX 43
+#define ESP_PIN_RX 44
 
 unsigned long scheduledSlotTime = 0;
 
@@ -108,15 +108,15 @@ void handleSchedulePacket(const uint8_t *senderMAC, const tdmaSchedulePacket_t *
 
 // Reads data from Serial UART prints and parses into packet.
 bool getDataFromCoproc(sensorDataPacket_t* dataPacket) {
-  if (COPROC_SERIAL.available()) {
-    String header = COPROC_SERIAL.readStringUntil('\n');
+  if (COPROC_PORT.available()) {
+    String header = COPROC_PORT.readStringUntil('\n');
     header.trim();
     if (header == "SENSOR_DATA:") {
-      dataPacket->type        = SENSOR_DATA;
-      dataPacket->temperature  = Serial.readStringUntil('\n').toFloat();
-      dataPacket->humidity     = Serial.readStringUntil('\n').toFloat();
-      dataPacket->soilMoisture = Serial.readStringUntil('\n').toInt();
-      dataPacket->timestamp    = Serial.readStringUntil('\n').toInt();
+      dataPacket->type         = SENSOR_DATA;
+      dataPacket->temperature  = DEBUG_PORT.readStringUntil('\n').toFloat();
+      dataPacket->humidity     = DEBUG_PORT.readStringUntil('\n').toFloat();
+      dataPacket->soilMoisture = DEBUG_PORT.readStringUntil('\n').toInt();
+      dataPacket->timestamp    = DEBUG_PORT.readStringUntil('\n').toInt();
       return true;
     }
   }
@@ -144,8 +144,8 @@ void OnDataRecv(const esp_now_recv_info *recv_info, const uint8_t *incomingData,
 // MAIN --------------------------------------------------------------------
 
 void setup(){
-  Serial.begin(9600);
-  COPROC_SERIAL.begin(9600, SERIAL_8N1, ESP_PIN_TX, ESP_PIN_RX);
+  DEBUG_PORT.begin(115200);
+  COPROC_PORT.begin(ESP_BAUD, SERIAL_8N1, ESP_PIN_TX, ESP_PIN_RX);
 
   WiFi.disconnect(true);
   delay(1000);
@@ -160,7 +160,7 @@ void setup(){
 void loop() {
   if (scheduleReceived && hasJoined && millis() >= scheduledSlotTime){
     // Trigger the coproc to send sensor data to ESP32.
-    Serial.println("SENSOR_DATA");
+    DEBUG_PORT.println("SENSOR_DATA");
     // Wait for coproc to respond.
     sensorDataPacket_t dataPacket;
     unsigned long timeout = millis() + 2000;

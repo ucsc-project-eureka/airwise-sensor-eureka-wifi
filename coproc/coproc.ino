@@ -9,10 +9,6 @@ Adafruit_seesaw ss;             // Soil sensor.
 #include "Adafruit_BME680.h"
 #include "SparkFun_u-blox_GNSS_Arduino_Library.h" // for M10S GPS interfacing.
 #include "SdFat.h"
-#include "wiring_private.h" // Necessary for pin peripheral multiplexing (from Sankie)
-/*
-          ^ Note: SoftwareSerial.h on arduino also allows this functionality 
-for more expensive time/no simultaneous UART transmissions.*/ 
 
 // SD Card Setup (From Sankie)
 // ── Pin definitions (SAMD21) (SD) ──────────────────────────────
@@ -35,6 +31,10 @@ uint8_t sectorBuf[512];
 // Other setup pinouts --------------------------------------
 // Use DEBUG_PORT for the Native Port
 #define DEBUG_PORT SerialUSB
+#define ESP_PORT Serial1
+
+#define ESP_BAUD 9600
+
 SFE_UBLOX_GNSS myGNSS;
 #define SOIL_I2C 0x36
 
@@ -44,8 +44,8 @@ SFE_UBLOX_GNSS myGNSS;
 #define BME_CS 10
 
 // From Airwise's ESP32 UART connections.
-#define ESP_PIN_TX 8
-#define ESP_PIN_RX 9
+#define ESP_PIN_TX 43
+#define ESP_PIN_RX 44
 
 // Reference values for sensor data processing.
 #define SEALEVELPRESSURE_HPA (1013.25)
@@ -54,10 +54,6 @@ SFE_UBLOX_GNSS myGNSS;
 #define wirePort Wire               // I2C Bus port name.
 Adafruit_BME680 bme(&wirePort);     // I2C
 Adafruit_INA3221 ina3221;
-
-// Pins/custom serial port for the ESP32 - Credit, Airwise team
-// Create a new Serial instance for SERCOM0 -------------------------------------
-Uart ESP32Serial(&sercom0, ESP_PIN_RX, ESP_PIN_TX, SERCOM_RX_PAD_3, UART_TX_PAD_2);
 
 // Packet definitions - unclear if still useful because all coms are text/string prints.
 enum messageType : uint8_t {
@@ -295,8 +291,10 @@ void setup(){
   while (!DEBUG_PORT);
   DEBUG_PORT.println("Debug Serial initialized!");
 
+  ESP_PORT.begin(ESP_BAUD, SERIAL_8N1, ESP_PIN_RX, ESP_PIN_TX);
+
   // Get UART connecting coproc and esp32 online.
-  ESP32Serial.begin(9600); // UART, esp32->coproc and vice versa.
+  ESP_PORT.begin(9600); // UART, esp32->coproc and vice versa.
   // Assign the pins to the SERCOM peripheral (Peripheral C)
   pinPeripheral(ESP_PIN_RX, PIO_SERCOM);
   pinPeripheral(ESP_PIN_TX, PIO_SERCOM);
@@ -316,8 +314,8 @@ void setup(){
 
 void loop(){
   currentTime = millis() - startTime;
-  if (ESP32Serial.available()){
-    String input = ESP32Serial.readStringUntil('\n');
+  if (ESP_PORT.available()){
+    String input = ESP_PORT.readStringUntil('\n');
     input.trim();
     // NOTE: Assuming printed format for received "give data" message this way:
     if (input == "SENSOR_DATA"){
@@ -331,7 +329,7 @@ void loop(){
 
     // NOTE: this assumes parsing on the other side will pick up string data sent in this format.
     DEBUG_PORT.println("\nSensor Data packet initialized!");
-    ESP32Serial.println("SENSOR_DATA:");
+    ESP_PORT.println("SENSOR_DATA:");
 
     // get latest bme data.
     bme.performReading();
@@ -347,28 +345,25 @@ void loop(){
     DEBUG_PORT.print(myData.temperature);
     DEBUG_PORT.println(" *C");
     
-    ESP32Serial.println(myData.temperature);
+    ESP_PORT.println(myData.temperature);
 
     DEBUG_PORT.println("Humidity = ");
     DEBUG_PORT.print(myData.humidity);
     DEBUG_PORT.println(" %");
     
-    ESP32Serial.println(myData.humidity);
+    ESP_PORT.println(myData.humidity);
 
     DEBUG_PORT.print("Soil Moisture = ");
     DEBUG_PORT.println(myData.soilMoisture);
 
-    ESP32Serial.println(myData.soilMoisture);
+    ESP_PORT.println(myData.soilMoisture);
 
     DEBUG_PORT.println("");
     DEBUG_PORT.print("Timestamp = ");
     DEBUG_PORT.print(myData.timestamp);
     DEBUG_PORT.println("");
 
-    ESP32Serial.println(myData.timestamp);
+    ESP_PORT.println(myData.timestamp);
     getDataFlag = false;
   }
-  // Ensure PA17 remains LOW
-  PORT->Group[0].OUTCLR.reg = PORT_PA17;
-
 }
