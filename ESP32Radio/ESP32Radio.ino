@@ -1,7 +1,8 @@
 
 /*
-NOTE: Compile this with the ESP32 s3 dev module Arduino board.
+NOTE: Compile this with the ESP32S3 dev module Arduino board.
 */
+
 #include <Wire.h>
 #include <SPI.h>
 #include <esp_now.h>

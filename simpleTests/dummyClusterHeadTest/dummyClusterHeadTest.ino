@@ -1,5 +1,5 @@
 /*
-NOTE: This should be compiled with the Heltec Wireless Shell (V3) in order to get responses from the esp32.
+NOTE: This should be compiled with the ESP32S3 Dev Module with CDC on Boot enabled.
 */
 
 #include <WiFi.h>

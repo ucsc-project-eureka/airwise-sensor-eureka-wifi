@@ -1,3 +1,5 @@
+// NoteL: Use an arduino zero (Native USB) config in arduino IDE for a working setup on the SAMD21.
+
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
@@ -335,9 +337,11 @@ void loop(){
     bme.performReading();
     myData.temperature = bme.temperature;
     myData.humidity = bme.humidity;
+    
     // myData.soilMoisture = ss.touchRead(0); // Soil monitor not connected during testing, but if not hardcoded use this.
     // Soil moisture dummy value:
     myData.soilMoisture = 500;
+
     myData.timestamp = currentTime;
 
     // print check.
