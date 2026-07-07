@@ -9,6 +9,7 @@ NOTE: This should be compiled with the Heltec Wireless Shell (V3) in order to ge
 #define MAX_SENSOR_NODES 3
 #define TDMA_SLOT_TIME 1000
 #define JOIN_REQUEST_TIMEOUT 3000
+#define PING_TIME 10000
 #define SENSOR_RESPONSE_TIMEOUT (TDMA_SLOT_TIME * MAX_SENSOR_NODES)
 
 uint8_t broadcastAddress[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
@@ -224,7 +225,7 @@ void setup(){
 void loop(){
   currentTime = millis();
   // every five seconds, send a "give me data" ping on the braodcast channel.
-  if((currentTime-sendTime)>=5000){
+  if((currentTime-sendTime)>=PING_TIME){
     sendDiscoveryPacket();
   }
   if (waitingForJoinRequests && (millis() - discoverySentTime > JOIN_REQUEST_TIMEOUT)) {
