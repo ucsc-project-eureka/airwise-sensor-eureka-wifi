@@ -138,7 +138,7 @@ void onDataRecv(const esp_now_recv_info* recvInfo, const uint8_t* incomingData){
   uint8_t packetType = incomingData[0];
 
   if (packetType == AGGREGATE_DATA){
-    handleAggregatePacket(&senderMac, (const aggregateDataPacket_t*) &incomingData);
+    handleAggregatePacket(&senderMac, const aggregateDataPacket_t* incomingData);
   }
   return;
 }
