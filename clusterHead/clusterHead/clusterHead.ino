@@ -1,18 +1,7 @@
-// This is Dummy clusterhead meant only for interfacing with the sensor nodes.
-/**
-Mandatory updates to be worked on include: 
-1) updating onDataRecv interrupt with the sink discovery packet type and appropriate response.
-- Reigter Peer info will need to have the address of the sink, the sink and CH need their own handshake.
-2) aggregating data and sending the sink that packet when prompted and times elapse.
-*/
 
 /*
 NOTE: This should be compiled with the ESP32S3 Dev Module with CDC on Boot enabled.
-This code will repeat the very last sensor reading sent to it if the sensor is umpluggged and the board is not restarted. it is a test.
 */
-
-// For real clusterhead: trigger is the sink, create a package with 3 sensor readings 
-// Clusterhead tasks: 
 
 #include <WiFi.h>
 #include <esp_now.h>
@@ -21,8 +10,8 @@ This code will repeat the very last sensor reading sent to it if the sensor is u
 #define MAX_SENSOR_NODES 3
 #define TDMA_SLOT_TIME 1000
 #define JOIN_REQUEST_TIMEOUT 3000
-#define PING_TIME 10000
 #define SENSOR_RESPONSE_TIMEOUT (TDMA_SLOT_TIME * MAX_SENSOR_NODES)
+#define DEBUG_PORT Serial
 
 uint8_t broadcastAddress[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 uint8_t sinkMAC[6];
@@ -87,31 +76,77 @@ uint8_t sensorNodeCount = 0;
 sensorDataPacket_t sensorData[MAX_SENSOR_NODES];
 bool sensorDataReceived[MAX_SENSOR_NODES] = { false };
 unsigned long joinCount = 0;
+bool sentDiscovery = false;
 
-int startTime;
-int currentTime;
-int sendTime;
+aggregateDataPacket_t aggData;
 
-void handleJoinRequest(const uint8_t *senderMAC) {
-  // Mark as joined.
-  joinCount ++;
+unsigned long startTime;
+unsigned long currentTime;
+unsigned long sendTime;
+
+esp_now_peer_info_t peerInfo;
+
+// send a "give me data" ping. Assuming peer channel is the broadcast channel.
+void sendDiscoveryPacket(discoveryPacket_t* sinkPkt){
+  discoveryPacket_t recvPkt;
+  memcpy(&recvPkt, sinkPkt, sizeof(discoveryPacket_t));
+  discoveryPacket_t giveMeData;
+      giveMeData.type = DISCOVERY;
+      giveMeData.hopCount = recvPkt.hopCount + 1;
+      giveMeData.roundCounter = recvPkt.roundCounter;
+      sendTime = currentTime;
+      esp_now_send(broadcastAddress,(uint8_t*)&giveMeData,sizeof(discoveryPacket_t));
+      DEBUG_PORT.println("Sent GIVE DATA!");
+      discoverySentTime = millis();
+      waitingForJoinRequests = true;     
+}
+
+void handleDiscoveryPacket(const uint8_t* senderMAC, const discoveryPacket_t* packet){
+  // Mark the clusterhead as assigned to that sender & register.
+  if (!sinkMACKnown){
+    memcpy(sinkMAC,senderMAC,6);
+    sinkMACKnown = true;
+    memcpy(peerInfo.peer_addr,sinkMAC, 6);
+    peerInfo.channel = 0;
+    peerInfo.encrypt = false;
+    esp_now_add_peer(&peerInfo);
+
+    DEBUG_PORT.println("Added sink as peer!");
+  }
+  if(!sentDiscovery && !waitingForJoinRequests && !waitingForSensorData){
+    discoveryPacket_t sinkPkt;
+    memcpy(&sinkPkt, packet, sizeof(discoveryPacket_t));
+    sendDiscoveryPacket(&sinkPkt);
+    sentDiscovery = true;
+  }
+  return;
+}
+
+void handleJoinRequest(const uint8_t* senderMAC) {
 
   // Check if MAC is already recorded
   for (uint8_t i = 0; i < sensorNodeCount; ++i) {
-    Serial.println("Sensor node MAC address is already recorded");
-    if (memcmp(sensorNodeMACs[i], senderMAC, 6) == 0) return;
+    if (memcmp(sensorNodeMACs[i], senderMAC, 6) == 0){
+      DEBUG_PORT.println("Sensor node MAC address is already recorded");
+      return;
+      }
   }
 
+  // Mark as joined.
+  joinCount ++;
   // Store MAC address
   if (sensorNodeCount < MAX_SENSOR_NODES) {
-    Serial.println("Storing sensor node MAC address");
-    memcpy(sensorNodeMACs[sensorNodeCount++], senderMAC, 6);
+    DEBUG_PORT.println("Storing sensor node MAC address");
+    memcpy(sensorNodeMACs[sensorNodeCount], senderMAC, 6);
+    // store for aggData packet as well.
+    memcpy(aggData.macs[sensorNodeCount], senderMAC, 6);
+    sensorNodeCount++;
   }
 }
 
-void handleSensorData(const uint8_t *mac, const uint8_t *incomingData, int len) {
+void handleSensorData(const uint8_t* mac, const uint8_t* incomingData, int len) {
   if (len != sizeof(sensorDataPacket_t)) {
-    Serial.println("Invalid SENSOR_DATA packet size");
+    DEBUG_PORT.println("Invalid SENSOR_DATA packet size");
     return;
   }
 
@@ -120,37 +155,47 @@ void handleSensorData(const uint8_t *mac, const uint8_t *incomingData, int len) 
       memcpy(&sensorData[i], incomingData, sizeof(sensorDataPacket_t));
       sensorDataReceived[i] = true;
 
-      Serial.printf("Stored SENSOR_DATA from node %d\n", i);
-      Serial.printf("  Temperature: %.2f °C\n", sensorData[i].temperature);
-      Serial.printf("  Humidity: %.2f %%\n", sensorData[i].humidity);
-      Serial.printf("  Soil Moisture: %u\n", sensorData[i].soilMoisture);
+      // AND add this data to the agg_data pkt to be sent to the sink.
+      DEBUG_PORT.printf("Stored SENSOR_DATA from node %d\n", i);
+      // store all for aggData.
+      aggData.temperatures[i] = sensorData[i].temperature;
+      DEBUG_PORT.printf("  Temperature: %.2f °C\n", sensorData[i].temperature);
+
+      aggData.humidities[i] = sensorData[i].humidity;
+      DEBUG_PORT.printf("  Humidity: %.2f %%\n", sensorData[i].humidity);
+      
+      aggData.soilMoistures[i] = sensorData[i].soilMoisture;
+      DEBUG_PORT.printf("  Soil Moisture: %u\n", sensorData[i].soilMoisture);
+
+      aggData.timestamps[i] = sensorData[i].timestamp;
+      DEBUG_PORT.println("Timestamp of packet recorded!");
       return;
     }
   }
 
-  Serial.println("SENSOR_DATA received from unknown MAC.");
+  DEBUG_PORT.println("SENSOR_DATA received from unknown MAC.");
 }
 
 void sendTDMASchedule() {
   tdmaSchedulePacket_t tdmaSchedulePacket;
   tdmaSchedulePacket.type = TDMA_SCHEDULE;
 
-  Serial.println("Preparing TDMA Schedule:");
+  DEBUG_PORT.println("Preparing TDMA Schedule:");
 
   for (int i = 0; i < sensorNodeCount; i++) {
     memcpy(tdmaSchedulePacket.macs[i], sensorNodeMACs[i], 6);
 
     // Print each MAC with slot index
-    Serial.printf("  Slot %d -> MAC: ", i);
+    DEBUG_PORT.printf("  Slot %d -> MAC: ", i);
     for (int j = 0; j < 6; j++) {
-      Serial.printf("%02X", tdmaSchedulePacket.macs[i][j]);
-      if (j < 5) Serial.print(":");
+      DEBUG_PORT.printf("%02X", tdmaSchedulePacket.macs[i][j]);
+      if (j < 5) DEBUG_PORT.print(":");
     }
-    Serial.println();
+    DEBUG_PORT.println();
   }
 
   esp_now_send(broadcastAddress, (uint8_t *)&tdmaSchedulePacket, sizeof(tdmaSchedulePacket));
-  Serial.println("TDMA Schedule sent to all nodes.");
+  DEBUG_PORT.println("TDMA Schedule sent to all nodes.");
 
   // Prepare to receive data
   scheduleSentTime = millis();
@@ -162,37 +207,37 @@ void sendTDMASchedule() {
   }
 }
 
-// send a "give me data" ping. Assuming peer channel is the broadcast channel.
-void sendDiscoveryPacket(){
-  discoveryPacket_t giveMeData = {
-      .type = DISCOVERY,
-      .hopCount = 1};
-      sendTime = currentTime;
-      esp_now_send(broadcastAddress,(uint8_t*)&giveMeData,sizeof(discoveryPacket_t));
-      Serial.println("Sent GIVE DATA!");
-      discoverySentTime = millis();
-      waitingForJoinRequests = true;     
+void sendAggregatePacket(){
+  // send pkt back to sink.
+  aggData.type = AGGREGATE_DATA;
+  aggData.readingsCount = sensorNodeCount;
+  esp_now_send(sinkMAC,(uint8_t*)&aggData,sizeof(aggregateDataPacket_t));
+  DEBUG_PORT.println("Sent Aggregate Data packet!");
 }
 
 void readMacAddress(){
   uint8_t baseMac[6];
   esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
   if (ret == ESP_OK) {
-    Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
+    DEBUG_PORT.printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
                   baseMac[0], baseMac[1], baseMac[2],
                   baseMac[3], baseMac[4], baseMac[5]);
   } else {
-    Serial.println("Failed to read MAC address");
+    DEBUG_PORT.println("Failed to read MAC address");
   }
 }
 
-void OnDataRecv(const esp_now_recv_info *recvInfo, const uint8_t *incomingData, int len) {
+void OnDataRecv(const esp_now_recv_info* recvInfo, const uint8_t* incomingData, int len) {
   // Determine type of packet received
   // get the source address.
   const uint8_t* senderMac = recvInfo->src_addr;
   uint8_t packetType = incomingData[0];
 
   switch (packetType) {
+    case DISCOVERY:
+      handleDiscoveryPacket(senderMac, (const discoveryPacket_t*)incomingData);
+      break;
+    
     case JOIN_REQUEST:
       handleJoinRequest(senderMac);
       break;
@@ -202,7 +247,7 @@ void OnDataRecv(const esp_now_recv_info *recvInfo, const uint8_t *incomingData, 
       break;
 
     default:
-      Serial.println("Unknown packet type received");
+      DEBUG_PORT.println("Unknown packet type received");
       break;
   }
 }
@@ -210,7 +255,7 @@ void OnDataRecv(const esp_now_recv_info *recvInfo, const uint8_t *incomingData, 
 // MAIN ---------------------------------------------------------------------------------
 
 void setup(){
-  Serial.begin(115200);
+  DEBUG_PORT.begin(115200);
 
   WiFi.disconnect(true);
   WiFi.mode(WIFI_STA);
@@ -220,28 +265,24 @@ void setup(){
   }
   esp_now_register_recv_cb(OnDataRecv);
 
-  Serial.println("[DEFAULT] ESP32 Board MAC Address: ");
+  DEBUG_PORT.println("[DEFAULT] ESP32 Board MAC Address: ");
   readMacAddress();
 
   // adding peer so that broadcast is sent
-  esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
   peerInfo.channel = 0;
+  peerInfo.encrypt = false;
   esp_now_add_peer(&peerInfo);
-  Serial.println("Broadcasting address added as wifi esp-now peer");
+  DEBUG_PORT.println("Broadcasting address added as wifi esp-now peer");
 
-  Serial.println("\nClusterhead stand-in ready.");
+  DEBUG_PORT.println("\nClusterhead ready.");
   startTime = millis();
 }
  
 void loop(){
   currentTime = millis();
-  // every five seconds, send a "give me data" ping on the braodcast channel.
-  if((currentTime-sendTime)>=PING_TIME){
-    sendDiscoveryPacket();
-  }
   if (waitingForJoinRequests && (millis() - discoverySentTime > JOIN_REQUEST_TIMEOUT)) {
-    Serial.println("Finished waiting for JOIN_REQUESTs.");
+    DEBUG_PORT.println("Finished waiting for JOIN_REQUESTs.");
     waitingForJoinRequests = false;
 
     // Send TDMA schedule only if it had sensors join it.
@@ -249,17 +290,23 @@ void loop(){
       sendTDMASchedule();
     }
     else{
-      Serial.println("Didn't receive any join requests, stalling for 3 seconds.");
+      DEBUG_PORT.println("Didn't receive any join requests, stalling for 3 seconds.");
       delay(3000);
+      sensorNodeCount = 0;
+      joinCount = 0;
+      sentDiscovery = false;
     }
-
   }
   if (waitingForSensorData && millis() - scheduleSentTime > SENSOR_RESPONSE_TIMEOUT) {
-    Serial.println("Finished waiting for JOIN_REQUESTs.");
+    DEBUG_PORT.println("Finished waiting for Sensor Data.");
     waitingForSensorData = false;
-    Serial.println("Data Recieved:");
-    Serial.printf("  Temperature: %.2f °C\n", sensorData[0].temperature);
-    Serial.printf("  Humidity: %.2f %%\n", sensorData[0].humidity);
-    Serial.printf("  Soil Moisture: %u\n", sensorData[0].soilMoisture);
+    // Once all sensors have reported data, send the agg data to the sink.
+    sendAggregatePacket();
+    // Reset all prior conditions, packages, and flags.
+    sentDiscovery = false;
+    sensorNodeCount = 0;
+    joinCount = 0;
+    memset(&aggData, 0, sizeof(aggData));
+    memset(sensorDataReceived, 0, sizeof(sensorDataReceived));
   }
 }
